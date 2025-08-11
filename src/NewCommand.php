@@ -57,6 +57,7 @@ class NewCommand extends Command
             ->addOption('livewire', null, InputOption::VALUE_NONE, 'Install the Livewire Starter Kit')
             ->addOption('livewire-class-components', null, InputOption::VALUE_NONE, 'Generate stand-alone Livewire class components')
             ->addOption('workos', null, InputOption::VALUE_NONE, 'Use WorkOS for authentication')
+            ->addOption('no-authentication', null, InputOption::VALUE_NONE, 'Do not generate authentication scaffolding')
             ->addOption('pest', null, InputOption::VALUE_NONE, 'Install the Pest testing framework')
             ->addOption('phpunit', null, InputOption::VALUE_NONE, 'Install the PHPUnit testing framework')
             ->addOption('npm', null, InputOption::VALUE_NONE, 'Install and build NPM dependencies')
@@ -136,16 +137,20 @@ class NewCommand extends Command
                     options: [
                         'laravel' => "Laravel's built-in authentication",
                         'workos' => 'WorkOS (Requires WorkOS account)',
+                        'none' => 'No authentication scaffolding',
                     ],
                     default: 'laravel',
                 )) {
                     'laravel' => $input->setOption('workos', false),
                     'workos' => $input->setOption('workos', true),
+                    'none' => $input->setOption('no-authentication', true),
                     default => null,
                 };
             }
 
-            if ($input->getOption('livewire') && ! $input->getOption('workos')) {
+            if ($input->getOption('livewire') &&
+                ! $input->getOption('workos') &&
+                ! $input->getOption('no-authentication')) {
                 $input->setOption('livewire-class-components', ! confirm(
                     label: 'Would you like to use Laravel Volt?',
                     default: true,
@@ -305,23 +310,31 @@ class NewCommand extends Command
                 $output->writeln('');
             }
 
+            $packageInstall = 'npm install';
+
+            if (file_exists($directory.'/pnpm-lock.yaml')) {
+                $packageInstall = 'pnpm install';
+            } elseif (file_exists($directory.'/yarn.lock')) {
+                $packageInstall = 'yarn install';
+            }
+
             $runNpm = $input->getOption('npm');
 
             if (! $input->getOption('npm') && $input->isInteractive()) {
                 $runNpm = confirm(
-                    label: 'Would you like to run <options=bold>npm install</> and <options=bold>npm run build</>?'
+                    label: 'Would you like to run <options=bold>'.$packageInstall.'</> and <options=bold>npm run build</>?'
                 );
             }
 
             if ($runNpm) {
-                $this->runCommands(['npm install', 'npm run build'], $input, $output, workingPath: $directory);
+                $this->runCommands([$packageInstall, 'npm run build'], $input, $output, workingPath: $directory);
             }
 
             $output->writeln("  <bg=blue;fg=white> INFO </> Application ready in <options=bold>[{$name}]</>. You can start your local development using:".PHP_EOL);
             $output->writeln('<fg=gray>➜</> <options=bold>cd '.$name.'</>');
 
             if (! $runNpm) {
-                $output->writeln('<fg=gray>➜</> <options=bold>npm install && npm run build</>');
+                $output->writeln('<fg=gray>➜</> <options=bold>'.$packageInstall.' && npm run build</>');
             }
 
             if ($this->isParkedOnHerdOrValet($directory)) {
@@ -764,6 +777,15 @@ class NewCommand extends Command
      */
     protected function getStarterKit(InputInterface $input): ?string
     {
+        if ($input->getOption('no-authentication')) {
+            return match (true) {
+                $input->getOption('react') => 'laravel/blank-react-starter-kit',
+                $input->getOption('vue') => 'laravel/blank-vue-starter-kit',
+                $input->getOption('livewire') => 'laravel/blank-livewire-starter-kit',
+                default => $input->getOption('using'),
+            };
+        }
+
         return match (true) {
             $input->getOption('react') => 'laravel/react-starter-kit',
             $input->getOption('vue') => 'laravel/vue-starter-kit',
